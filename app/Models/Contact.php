@@ -12,7 +12,7 @@ class Contact extends Model
 
     protected $fillable = ['user_id','name','phone','email','photo'];
 
-    protected $hidden = ['created_at','updated_at'];
+    protected $hidden = ['user_id', 'photo', 'created_at','updated_at'];
 
     protected $appends = ['photo_url'];
 

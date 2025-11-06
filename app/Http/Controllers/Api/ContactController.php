@@ -17,10 +17,33 @@ class ContactController extends Controller
     public function index(Request $request)
     {
         try {
-            $contacts = $request->user()->contacts()->get();
+            $perPage = (int) $request->query('per_page', 5);
+            $perPage = min(max($perPage, 1), 100);
+
+            /** @var \App\Models\User $user */
+            $user = $request->user();
+
+            $query = $user->contacts()->orderBy('name');
+
+            $paginator = $query->paginate($perPage)->appends($request->query());
+
             return response()->json([
                 'success' => true,
-                'data' => $contacts
+                'data' => $paginator->items(),
+                'meta' => [
+                    'current_page' => $paginator->currentPage(),
+                    'per_page' => $paginator->perPage(),
+                    'total' => $paginator->total(),
+                    'last_page' => $paginator->lastPage(),
+                    'from' => $paginator->firstItem(),
+                    'to' => $paginator->lastItem(),
+                ],
+                'links' => [
+                    'first' => $paginator->url(1),
+                    'last' => $paginator->url($paginator->lastPage()),
+                    'prev' => $paginator->previousPageUrl(),
+                    'next' => $paginator->nextPageUrl(),
+                ]
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -142,6 +165,7 @@ class ContactController extends Controller
             }
 
             $contact->update($data);
+            $contact->refresh();
 
             return response()->json(
                 ['success' => true,
