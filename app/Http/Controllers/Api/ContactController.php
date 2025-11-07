@@ -25,6 +25,17 @@ class ContactController extends Controller
 
             $query = $user->contacts()->orderBy('name');
 
+            $q = trim((string) $request->query('q', ''));
+            if ($q !== '') {
+                $digits = preg_replace('/\D+/', '', $q);
+                $query->where(function ($sub) use ($q, $digits) {
+                    $sub->where('name', 'like', "%{$q}%")
+                        ->orWhere('email', 'like', "%{$q}%");
+                    if ($digits !== '')
+                        $sub->orWhere('phone', 'like', "%{$digits}%");
+                });
+            }
+
             $paginator = $query->paginate($perPage)->appends($request->query());
 
             return response()->json([
