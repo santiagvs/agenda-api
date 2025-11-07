@@ -36,8 +36,10 @@ services:
       - app
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - storage:/var/www/html/storage:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
 
   db:
     image: mysql:8.4
