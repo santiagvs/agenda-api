@@ -1,59 +1,120 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Agenda API (Laravel + Sanctum)
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+API simples de contatos com autenticação via token (Bearer). Stack: Laravel 12, Sanctum, MySQL.
 
-## About Laravel
+__Link do vídeo da apresentação do teste: https://youtu.be/BsesJC2BuJg__
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Requisitos
+- PHP 8.2+, Composer, MySQL 8 (ou Docker)
+- .env com `APP_KEY` e credenciais do `DB`
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Setup local (sem Docker)
+1. Instalar dependências:
+   - composer install
+2. Configurar .env:
+   - APP_KEY: execute `php artisan key:generate`
+   - Envs `DB_*` conforme o MySQL
+3. Migrar e preparar:
+   - php artisan migrate
+   - php artisan storage:link
+4. Subir:
+   - php artisan serve
+   - Health: GET http://localhost:8000/up
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Autenticação
+- Bearer Token (Sanctum Personal Access Token)
+- Headers necessários:
+  - Authorization: Bearer SEU_TOKEN
+  - Accept: application/json (em requisições que não exijam `multipart/form-data`)
 
-## Learning Laravel
+## Endpoints
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+Auth
+- POST /api/register
+  - body: { name, email, password, password_confirmation }
+- POST /api/login
+  - body: { email, password }
+  - resp: { token, token_type: "Bearer", user }
+- POST /api/logout (auth)
+- GET /api/me (auth)
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+Contatos (auth)
+- GET /api/contacts?per_page=5&q=marc
+  - q busca substring em name/email e dígitos em phone
+- GET /api/contacts/{id}
+- POST /api/contacts
+  - JSON: { name, phone, email? }
+  - ou multipart (upload de foto):
+    - fields: name, phone, email?, photo(file)
+- PUT /api/contacts/{id}
+  - JSON quando sem arquivo
+  - Multipart com arquivo: usar method spoof
+    - FormData: _method=PUT, name, phone, email?, photo(file)
+- DELETE /api/contacts/{id}
 
-## Laravel Sponsors
+Exemplos
+````bash
+# Registrar
+curl -sX POST http://localhost:8000/api/register \
+  -H "Accept: application/json" -H "Content-Type: application/json" \
+  -d '{"name":"Alice","email":"alice@mail.com","password":"secret123","password_confirmation":"secret123"}'
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+# Login
+TOKEN=$(curl -sX POST http://localhost:8000/api/login \
+  -H "Accept: application/json" -H "Content-Type: application/json" \
+  -d '{"email":"alice@mail.com","password":"secret123"}' | jq -r '.data.token')
 
-### Premium Partners
+# Listar
+curl -s "http://localhost:8000/api/contacts?per_page=5&q=mar" \
+  -H "Authorization: Bearer $TOKEN" -H "Accept: application/json" | jq
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+# Criar com upload
+curl -sX POST http://localhost:8000/api/contacts \
+  -H "Authorization: Bearer $TOKEN" -H "Accept: application/json" \
+  -F "name=Marcelo" -F "phone=82999999999" -F "email=marcelo@email.com" \
+  -F "photo=@/caminho/foto.jpg"
 
-## Contributing
+# Atualizar com arquivo (method spoofing)
+curl -sX POST http://localhost:8000/api/contacts/2 \
+  -H "Authorization: Bearer $TOKEN" -H "Accept: application/json" \
+  -F "_method=PUT" -F "name=Marcelo Jr" -F "photo=@/caminho/novo.jpg"
+````
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## Respostas e paginação
+- Estrutura comum:
+  - success (bool), message (opcional), data, meta, links
+- Paginação: per_page (1–100), meta.links retornados no índice
+- Exemplo:
+```json
+{
+    "success": true,
+    "data": [
+        {
+            "id": 1,
+            "name": "João Silva",
+            "phone": "28302390293",
+            "email": null,
+            "photo_url": "site-app.com/storage/contacts/imagem.jpg"
+        }
+    ],
+    "meta": {
+        "current_page": 1,
+        "per_page": 5,
+        "total": 1,
+        "last_page": 1,
+        "from": 1,
+        "to": 1 
+    },
+    "links": {
+        "first": "site-app.com/api/contacts?per_page=5&page=1",
+        "last": "site-app.com/api/contacts?per_page=5&page=1",
+        "prev": null,
+        "next": null
+    }
+}
+```
 
-## Code of Conduct
-
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
-
-## Security Vulnerabilities
-
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
-
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+## Imagens (photo_url)
+- Servidas em /storage/... pelo Nginx (alias para storage/app/public)
+- Produção: use `FILESYSTEM_DISK=public` e mantenha o volume storage compartilhado entre app e web
+- Se 404 em /storage/...: confirme arquivo no container web em /var/www/html/storage/app/public/contacts.
